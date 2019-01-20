@@ -86,7 +86,13 @@ public class MineResetLite extends JavaPlugin {
 		}
 	}
 	
+	private static MineResetLite INSTANCE;
+	static MineResetLite getInstance() {
+		return INSTANCE;
+	}
+	
 	public void onEnable() {
+		INSTANCE = this;
 		mines = new ArrayList<>();
 		logger = getLogger();
 		if (!setupConfig()) {
