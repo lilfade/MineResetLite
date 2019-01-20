@@ -12,6 +12,7 @@ import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.entity.Player;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -475,11 +476,16 @@ public class Mine implements ConfigurationSerializable {
 		//mi.updateSigns();
 		MineUpdatedEvent mue = new MineUpdatedEvent(this);
 		Bukkit.getServer().getPluginManager().callEvent(mue);
-		
+		final Mine thisMine = this;
 		if (this.resetPercent > 0 && this.currentBroken >= (this.maxCount * (1.0 - this.resetPercent))) {
-			reset();
-			if (!isSilent)
-				MineResetLite.broadcast(Phrases.phrase("mineAutoResetBroadcast", this), this);
+			new BukkitRunnable() {
+				@Override
+				public void run() {
+					reset();
+					if (!isSilent)
+						MineResetLite.broadcast(Phrases.phrase("mineAutoResetBroadcast", this), this);
+				}
+			}.runTask(MineResetLite.getInstance());
 		}
 	}
 	
