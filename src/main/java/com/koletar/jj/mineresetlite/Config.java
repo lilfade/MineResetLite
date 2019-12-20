@@ -1,5 +1,7 @@
 package com.koletar.jj.mineresetlite;
 
+import org.bukkit.Effect;
+import org.bukkit.Sound;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.BufferedWriter;
@@ -16,6 +18,26 @@ public class Config {
     private static boolean broadcastNearbyOnly = false;
     private static boolean checkForUpdates = true;
     private static String locale = "en";
+    
+    private static int resetDelay = 20; // in ticks.
+    public static int getResetDelay() {
+        return resetDelay;
+    }
+    
+    public static void setResetDelay(int resetDelay) {
+        Config.resetDelay = resetDelay;
+    }
+    
+    private static void writeResetDelay(BufferedWriter out) throws IOException {
+        out.write("# This option defines the delay (in ticks : 20 ticks = 1 sec) between the issue of reset command");
+        out.newLine();
+        out.write("# and the actual execution of the reset action.  If you have large explosions in the mine, you might need to ");
+        out.newLine();
+        out.write("# increase this value to make sore the explosion action completes before the reset process commences.");
+        out.newLine();
+        out.write("reset-delay: 20");
+        out.newLine();
+    }
 
     static boolean getBroadcastInWorldOnly() {
         return broadcastInWorldOnly;
@@ -58,7 +80,7 @@ public class Config {
     private static void setCheckForUpdates(boolean checkForUpdates) {
         Config.checkForUpdates = checkForUpdates;
     }
-
+    
     private static void writeCheckForUpdates(BufferedWriter out) throws IOException {
         out.write("# When true, this config option enables update alerts. I do not send any extra information along when ");
         out.newLine();
@@ -88,6 +110,36 @@ public class Config {
         out.write("locale: en");
         out.newLine();
     }
+    
+    public static Effect getLuckyEffect() {
+        return luckyEffect;
+    }
+    
+    private static void setLuckyEffect(Effect effect) {
+        luckyEffect = effect;
+    }
+    
+    public static Sound getLuckySound() {
+        return luckySound;
+    }
+    
+    private static void setLuckySound(Sound sound) {
+        luckySound = sound;
+    }
+    
+    private static Effect luckyEffect;
+    private static Sound luckySound;
+    private static void writeLuckyEffect(BufferedWriter out) throws IOException {
+        out.write("# This option specifies the visual effect played when a player mines a lucky block.");
+        out.newLine();
+        out.write("lucky_block_effect: MOBSPAWNER_FLAMES");
+    }
+    private static void writeLuckySound(BufferedWriter out) throws IOException {
+        out.write("# This option specifies the sound effect played when a player mines a lucky block.");
+        out.newLine();
+        out.write("lucky_block_sound: AMBIENCE_THUNDER");
+    }
+    
 
     static void initConfig(File dataFolder) throws IOException {
         if (!dataFolder.exists()) {
@@ -103,6 +155,9 @@ public class Config {
             Config.writeBroadcastNearbyOnly(out);
             Config.writeCheckForUpdates(out);
             Config.writeLocale(out);
+            Config.writeResetDelay(out);
+            Config.writeLuckyEffect(out);
+            Config.writeLuckySound(out);
             out.close();
         }
         YamlConfiguration config = YamlConfiguration.loadConfiguration(configFile);
@@ -126,6 +181,29 @@ public class Config {
             Config.setLocale(config.getString("locale"));
         } else {
             Config.writeLocale(out);
+        }
+        if (config.contains("reset-delay")) {
+            Config.setResetDelay(config.getInt("reset-delay", 20));
+        } else {
+            Config.writeResetDelay(out);
+        }
+        if (config.contains("lucky_block_effect")) {
+            try {
+                Config.setLuckyEffect(Effect.valueOf(config.getString("lucky_block_effect", "MOBSPAWNER_FLAMES")));
+            } catch (Throwable ignore) {
+                Config.setLuckyEffect(null);
+            }
+        } else {
+            Config.writeLuckyEffect(out);
+        }
+        if (config.contains("lucky_block_sound")) {
+            try {
+                Config.setLuckySound(Sound.valueOf(config.getString("lucky_block_sound", "AMBIENCE_THUNDER")));
+            } catch (Throwable ignore) {
+                Config.setLuckySound(null);
+            }
+        } else {
+            Config.writeLuckySound(out);
         }
         out.close();
     }

@@ -128,14 +128,14 @@ public class CommandManager {
             method.invoke(instances.get(method), methodArgs);
         } catch (IllegalAccessException e) {
             e.printStackTrace();
-            throw new RuntimeException("Invalid methods on command!");
+            throw new RuntimeException("Invalid methods on command!" + e.getLocalizedMessage());
         } catch (InvocationTargetException e) {
             if (e.getCause() instanceof InvalidCommandArgumentsException) {
                 sender.sendMessage(phrase("invalidArguments"));
                 sender.sendMessage(phrase("invalidArgsUsage", command.aliases()[0], command.usage()));
             } else {
                 e.printStackTrace();
-                throw new RuntimeException("Invalid methods on command!");
+                throw new RuntimeException("Invalid methods on command!" + e.getLocalizedMessage());
             }
         }
     }

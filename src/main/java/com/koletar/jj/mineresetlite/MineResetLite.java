@@ -1,12 +1,13 @@
 package com.koletar.jj.mineresetlite;
 
+import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.vk2gpz.mineresetlite.listeners.BlockEventListener;
 import com.vk2gpz.mineresetlite.listeners.ExplodeEventListener;
 import com.vk2gpz.mineresetlite.listeners.PlayerEventListener;
 import com.koletar.jj.mineresetlite.commands.MineCommands;
 import com.koletar.jj.mineresetlite.commands.PluginCommands;
-import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.vk2gpz.vklib.mc.material.MaterialUtil;
+//import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
@@ -23,7 +24,6 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitScheduler;
-import com.koletar.jj.mineresetlite.org.mcstats.Metrics;
 import org.bukkit.scheduler.BukkitTask;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -54,7 +54,6 @@ public class MineResetLite extends JavaPlugin {
 	private Logger logger;
 	private CommandManager commandManager;
 	private WorldEditPlugin worldEdit = null;
-	private Metrics metrics = null;
 	private int saveTaskId = -1;
 	private int resetTaskId = -1;
 	private BukkitTask updateTask = null;
@@ -120,16 +119,14 @@ public class MineResetLite extends JavaPlugin {
 		if (getServer().getPluginManager().isPluginEnabled("WorldEdit")) {
 			worldEdit = (WorldEditPlugin) getServer().getPluginManager().getPlugin("WorldEdit");
 		}
-		//Metrics
-        /*
-        try {
-            metrics = new Metrics(this);
-            metrics.start();
-        } catch (IOException e) {
-            logger.warning("MineResetLite couldn't initialize metrics!");
-            e.printStackTrace();
-        }
-        */
+
+		// All you have to do is adding this line in your onEnable method:
+		//Metrics metrics = new Metrics(this);
+		
+		// Optional: Add custom charts
+		//metrics.addCustomChart(new Metrics.SimplePie("chart_id", () -> "My value"));
+		
+		
 		//Load mines
 		File[] mineFiles = new File(getDataFolder(), "mines").listFiles(new IsMineFile());
 		assert mineFiles != null;
@@ -144,6 +141,7 @@ public class MineResetLite extends JavaPlugin {
 				}
 				Mine mine = (Mine) o;
 				mines.add(mine);
+				mine.reset();
 			} catch (Throwable t) {
 				logger.severe("Unable to load mine!");
 			}

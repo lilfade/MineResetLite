@@ -1,6 +1,7 @@
 package com.koletar.jj.mineresetlite;
 
 import com.vk2gpz.mineresetlite.event.MineUpdatedEvent;
+import com.vk2gpz.vklib.math.MathUtil;
 import com.vk2gpz.vklib.reflection.ReflectionUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -10,22 +11,20 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 import org.bukkit.entity.Player;
+import org.bukkit.potion.Potion;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.logging.Logger;
 
 /**
  * @author jjkoletar
  */
 public class Mine implements ConfigurationSerializable {
+	private static Random RAND = new Random();
+	
 	private int minX;
 	private int minY;
 	private int minZ;
@@ -34,6 +33,7 @@ public class Mine implements ConfigurationSerializable {
 	private int maxZ;
 	private World world;
 	private Map<SerializableBlock, Double> composition;
+	private Set<SerializableBlock> structure; // structure material defining the mine walls, radder, etc.
 	private int resetDelay;
 	private List<Integer> resetWarnings;
 	private String name;
@@ -54,6 +54,9 @@ public class Mine implements ConfigurationSerializable {
 	
 	private List<PotionEffect> potions = new ArrayList<>();
 	
+	int luckyBlocks = 0;
+	List<Integer> luckyNum;
+	List<String> luckyCommands;
 	
 	public Mine(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, String name, World world) {
 		this.minX = minX;
@@ -66,6 +69,9 @@ public class Mine implements ConfigurationSerializable {
 		this.world = world;
 		composition = new HashMap<>();
 		resetWarnings = new LinkedList<>();
+		structure = new HashSet<>();
+		luckyNum = new ArrayList<>();
+		luckyCommands = new ArrayList<>();
 		
 		setMaxCount();
 	}
@@ -99,11 +105,22 @@ public class Mine implements ConfigurationSerializable {
 			Map<String, Double> sComposition = (Map<String, Double>) me.get("composition");
 			composition = new HashMap<>();
 			for (Map.Entry<String, Double> entry : sComposition.entrySet()) {
-				composition.put(new SerializableBlock(entry.getKey()), entry.getValue());
+				composition.put(new SerializableBlock(entry.getKey()), MathUtil.round(entry.getValue(), 4));
 			}
 		} catch (Throwable t) {
 			throw new IllegalArgumentException("Error deserializing composition");
 		}
+		
+		try {
+			List<String> sStructure = (List<String>) me.get("structure");
+			structure = new HashSet<>();
+			for (String entry : sStructure) {
+				structure.add(new SerializableBlock(entry));
+			}
+		} catch (Throwable t) {
+			//throw new IllegalArgumentException("Error deserializing structure");
+		}
+		
 		name = (String) me.get("name");
 		resetDelay = (Integer) me.get("resetDelay");
 		List<String> warnings = (List<String>) me.get("resetWarnings");
@@ -161,6 +178,13 @@ public class Mine implements ConfigurationSerializable {
 				potions.add(pot);
 			}
 		}
+		
+		if (me.containsKey("lucky_blocks")) {
+			setLuckyBlockNum((int) me.get("lucky_blocks"));
+		}
+		if (me.containsKey("lucky_commands")) {
+			setLuckyCommands((List<String>) me.get("lucky_commands"));
+		}
 	}
 	
 	public Map<String, Object> serialize() {
@@ -178,6 +202,11 @@ public class Mine implements ConfigurationSerializable {
 			sComposition.put(entry.getKey().toString(), entry.getValue());
 		}
 		me.put("composition", sComposition);
+		List<String> sStructure = new ArrayList<>();
+		for (SerializableBlock entry : structure) {
+			sStructure.add(entry.toString());
+		}
+		me.put("structure", sStructure);
 		me.put("name", name);
 		me.put("resetDelay", resetDelay);
 		List<String> warnings = new LinkedList<>();
@@ -206,6 +235,9 @@ public class Mine implements ConfigurationSerializable {
 			potionpairs.put(pe.getType().getName(), pe.getAmplifier());
 		}
 		me.put("potions", potionpairs);
+		
+		me.put("lucky_blocks", luckyBlocks);
+		me.put("lucky_commands", luckyCommands);
 		
 		return me;
 	}
@@ -265,6 +297,10 @@ public class Mine implements ConfigurationSerializable {
 		return composition;
 	}
 	
+	public Set<SerializableBlock> getStructure() {
+		return structure;
+	}
+	
 	public boolean isSilent() {
 		return isSilent;
 	}
@@ -278,7 +314,7 @@ public class Mine implements ConfigurationSerializable {
 		for (Double d : composition.values()) {
 			total += d;
 		}
-		return total;
+		return MathUtil.round(total, 4);
 	}
 	
 	public boolean isInside(Player p) {
@@ -305,68 +341,103 @@ public class Mine implements ConfigurationSerializable {
 	}
 	
 	public void reset() {
-		//Get probability map
-		List<CompositionEntry> probabilityMap = mapComposition(composition);
-		//Pull players out
-		for (Player p : Bukkit.getServer().getOnlinePlayers()) {
-			Location l = p.getLocation();
-			if (isInside(p)) {
-				//p.teleport(new Location(world, l.getX(), maxY + 2D, l.getZ()));
-				if (tpY > -Integer.MAX_VALUE) {
-					p.teleport(getTp());
-				} else { // empty spawn location!
-					// find the safe landing location!
-					Location tp = new Location(world, l.getX(), maxY + 1D, l.getZ());
-					Block block = tp.getBlock();
-					
-					// check to make sure we don't suffocate player
-					if (block.getType() != Material.AIR || block.getRelative(BlockFace.UP).getType() != Material.AIR) {
-						tp = new Location(world, l.getX(), l.getWorld().getHighestBlockYAt(l.getBlockX(), l.getBlockZ()), l.getZ());
-					}
-					p.teleport(tp);
-				}
-			}
-		}
-		//Actually reset
-		Random rand = new Random();
-		for (int x = minX; x <= maxX; ++x) {
-			for (int y = minY; y <= maxY; ++y) {
-				for (int z = minZ; z <= maxZ; ++z) {
-					if (!fillMode || world.getBlockAt(x, y, z).getType() == Material.AIR) {
-						if (y == maxY && surface != null) {
-							//world.getBlockAt(x, y, z).setTypeIdAndData(surface.getBlockId(), surface.getData(), false);
-							Block b = world.getBlockAt(x, y, z);
-							b.setType(surface.getBlockType());
-							if (surface.getData() > 0) {
-								try {
-									ReflectionUtil.makePerform(b, "setData", new Object[]{surface.getData()});
-								} catch (Throwable ignore) {
-								
-								}
+		new BukkitRunnable() {
+			@Override
+			public void run() {
+				//Get probability map
+				List<CompositionEntry> probabilityMap = mapComposition(composition);
+				//Pull players out
+				for (Player p : Bukkit.getServer().getOnlinePlayers()) {
+					Location l = p.getLocation();
+					if (isInside(p)) {
+						//p.teleport(new Location(world, l.getX(), maxY + 2D, l.getZ()));
+						if (tpY > -Integer.MAX_VALUE) {
+							p.teleport(getTp());
+						} else { // empty spawn location!
+							// find the safe landing location!
+							Location tp = new Location(world, l.getX(), maxY + 1D, l.getZ());
+							Block block = tp.getBlock();
+							
+							// check to make sure we don't suffocate player
+							if (block.getType() != Material.AIR || block.getRelative(BlockFace.UP).getType() != Material.AIR) {
+								tp = new Location(world, l.getX(), l.getWorld().getHighestBlockYAt(l.getBlockX(), l.getBlockZ()), l.getZ());
 							}
-							continue;
+							p.teleport(tp);
 						}
-						double r = rand.nextDouble();
-						for (CompositionEntry ce : probabilityMap) {
-							if (r <= ce.getChance()) {
-								//world.getBlockAt(x, y, z).setTypeIdAndData(ce.getBlock().getBlockId(), ce.getBlock().getData(), false);
-								Block b = world.getBlockAt(x, y, z);
-								b.setType(ce.getBlock().getBlockType());
-								if (ce.getBlock().getData() > 0) {
-									try {
-										ReflectionUtil.makePerform(b, "setData", new Object[]{ce.getBlock().getData()});
-									} catch (Throwable ignore) {
-									
+					}
+				}
+				
+				//Actually reset
+				for (int x = minX;x <= maxX; ++x) {
+					for (int y = minY; y <= maxY; ++y) {
+						for (int z = minZ; z <= maxZ; ++z) {
+							if (!fillMode || shoulBeFilled(world.getBlockAt(x, y, z).getType())) {
+								if (y == maxY && surface != null) {
+									//world.getBlockAt(x, y, z).setTypeIdAndData(surface.getBlockId(), surface.getData(), false);
+									Block b = world.getBlockAt(x, y, z);
+									b.setType(surface.getBlockType());
+									if (surface.getData() > 0) {
+										try {
+											ReflectionUtil.makePerform(b, "setData", new Object[]{surface.getData()});
+										} catch (Throwable ignore) {
+										
+										}
+									}
+									continue;
+								}
+								double r = RAND.nextDouble();
+								for (CompositionEntry ce : probabilityMap) {
+									if (r <= ce.getChance()) {
+										//world.getBlockAt(x, y, z).setTypeIdAndData(ce.getBlock().getBlockId(), ce.getBlock().getData(), false);
+										Block b = world.getBlockAt(x, y, z);
+										b.setType(ce.getBlock().getBlockType());
+										if (ce.getBlock().getData() > 0) {
+											try {
+												ReflectionUtil.makePerform(b, "setData", new Object[]{ce.getBlock().getData()});
+											} catch (Throwable ignore) {
+											
+											}
+										}
+										break;
 									}
 								}
-								break;
 							}
 						}
 					}
 				}
+				resetMRLP();
 			}
+		}.runTaskLater(MineResetLite.getInstance(), Config.getResetDelay());
+	}
+	
+	private transient Set<Material> mineMaterials;
+	private transient Set<Material> exceptions;  // these material won't be replaced.
+	
+	private void setMineMaterials() {
+		if (mineMaterials == null) {
+			mineMaterials = new HashSet<>();
 		}
-		resetMRLP();
+		
+		for (SerializableBlock sb : this.composition.keySet())
+			mineMaterials.add(sb.getBlockType());
+	}
+	
+	private void setStructureMaterials() {
+		if (exceptions == null) {
+			exceptions = new HashSet<>();
+		}
+		
+		for (SerializableBlock sb : this.structure)
+			exceptions.add(sb.getBlockType());
+	}
+	
+	private boolean shoulBeFilled(Material mat) {
+		if (mineMaterials == null || mineMaterials.size() == 0)
+			setMineMaterials();
+		if (exceptions == null)
+			setStructureMaterials();
+		
+		return (mat == Material.AIR || (!mineMaterials.contains(mat) && !exceptions.contains(mat)));
 	}
 	
 	void cron() {
@@ -384,11 +455,14 @@ public class Mine implements ConfigurationSerializable {
 			resetClock = resetDelay;
 			return;
 		}
+		
+		//if (!isSilent) {
 		for (Integer warning : resetWarnings) {
 			if (warning == resetClock) {
 				MineResetLite.broadcast(Phrases.phrase("mineWarningBroadcast", this, warning), this);
 			}
 		}
+		//}
 	}
 	
 	public static class CompositionEntry {
@@ -418,7 +492,7 @@ public class Mine implements ConfigurationSerializable {
 		}
 		//Pad the remaining percentages with air
 		if (max < 1) {
-			composition.put(new SerializableBlock(0), 1 - max);
+			composition.put(new SerializableBlock(0), MathUtil.round(1 - max, 4));
 			max = 1;
 		}
 		double i = 0;
@@ -472,18 +546,20 @@ public class Mine implements ConfigurationSerializable {
 	
 	public void setBrokenBlocks(int broken) {
 		this.currentBroken = broken;
+		
 		// send mine changed event
 		//mi.updateSigns();
 		MineUpdatedEvent mue = new MineUpdatedEvent(this);
 		Bukkit.getServer().getPluginManager().callEvent(mue);
 		final Mine thisMine = this;
+		final boolean silent = this.isSilent;
 		if (this.resetPercent > 0 && this.currentBroken >= (this.maxCount * (1.0 - this.resetPercent))) {
 			new BukkitRunnable() {
 				@Override
 				public void run() {
 					reset();
-					if (!isSilent)
-						MineResetLite.broadcast(Phrases.phrase("mineAutoResetBroadcast", this), this);
+					if (!silent)
+						MineResetLite.broadcast(Phrases.phrase("mineAutoResetBroadcast", thisMine), thisMine);
 				}
 			}.runTask(MineResetLite.getInstance());
 		}
@@ -495,13 +571,15 @@ public class Mine implements ConfigurationSerializable {
 	
 	private void resetMRLP() {
 		this.currentBroken = 0;
+		resetLuckyNumbers();
 	}
 	
 	public List<PotionEffect> getPotions() {
 		return this.potions;
 	}
 	
-	public void addPotion(String potstr) {
+	public PotionEffect addPotion(String potstr) {
+		PotionEffect pot = null;
 		String[] tokens = potstr.split(":");
 		int amp = 1;
 		try {
@@ -511,12 +589,20 @@ public class Mine implements ConfigurationSerializable {
 		} catch (Throwable ignore) {
 		
 		}
-		removePotion(tokens[0]);
-		PotionEffect pot = new PotionEffect(
-				PotionEffectType.getByName(tokens[0]),
-				Integer.MAX_VALUE,
-				amp);
-		potions.add(pot);
+		//System.out.println("token[0]" + tokens[0]);
+		//System.out.println("token[1]" + tokens[1]);
+		try {
+			removePotion(tokens[0]);
+			pot = new PotionEffect(
+					PotionEffectType.getByName(tokens[0]),
+					Integer.MAX_VALUE,
+					amp);
+			potions.add(pot);
+		} catch (Throwable ignore) {
+		
+		}
+		
+		return pot;
 	}
 	
 	public void removePotion(String pot) {
@@ -529,5 +615,66 @@ public class Mine implements ConfigurationSerializable {
 		}
 		if (found != null)
 			potions.remove(found);
+	}
+	
+	public void redefine(int minX, int minY, int minZ, int maxX, int maxY, int maxZ, World world) {
+		this.minX = minX;
+		this.minY = minY;
+		this.minZ = minZ;
+		this.maxX = maxX;
+		this.maxY = maxY;
+		this.maxZ = maxZ;
+		this.world = world;
+	}
+	
+	public void setLuckyBlockNum(int num) {
+		this.luckyBlocks = num;
+		resetLuckyNumbers();
+	}
+	
+	private void resetLuckyNumbers() {
+		if (this.luckyNum == null) {
+			this.luckyNum = new ArrayList<>();
+		}
+		this.luckyNum.clear();
+		for (int i = 0; i < this.luckyBlocks; i++) {
+			int num = RAND.nextInt(this.maxCount) + 1;
+			this.luckyNum.add(num);
+			//System.out.println("Mine: " + mine + " : lucky block = " + num);
+		}
+	}
+	
+	private boolean isLuckyNumber(int num) {
+		return this.luckyNum.contains(num);
+	}
+	
+	public boolean executeLuckyCommand(Player p) {
+		if (isLuckyNumber(this.currentBroken) && this.luckyCommands.size() > 0) {
+			int id = RAND.nextInt(this.luckyCommands.size());
+			String cmd = this.luckyCommands.get(id).replace("%player%", p.getName());
+			String[] cmds = cmd.split(";");
+			try {
+				for (String c : cmds) {
+					Bukkit.getServer().dispatchCommand(Bukkit.getConsoleSender(), c.trim());
+				}
+				// play effect
+				if (Config.getLuckyEffect() != null)
+					p.getWorld().playEffect(p.getLocation(), Config.getLuckyEffect(), 0, 20);
+				if (Config.getLuckySound() != null)
+					p.getWorld().playSound(p.getLocation(), Config.getLuckySound(), 1F, 1F);
+				return true;
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return false;
+	}
+	
+	void setLuckyCommands(List<String> list) {
+		this.luckyCommands = list;
+	}
+	
+	public void makeLucky(int num) {
+		this.luckyNum.set(0, num);
 	}
 }

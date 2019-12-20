@@ -19,7 +19,11 @@ public class SerializableBlock {
     public SerializableBlock(int blockId, byte data) {
         this(blockId + ":" + data);
     }
-
+    
+    public SerializableBlock(String name, byte data) {
+        this(name + ":" + data);
+    }
+    
     public SerializableBlock(String self) {
         String[] bits = self.split(":");
         if (bits.length < 1) {
